@@ -1,0 +1,52 @@
+{
+  "manifest_version": 3,
+  "name": "Linh Kiện PC Facebook Tracker",
+  "version": "0.5.1",
+  "description": "Tự động theo dõi giá CPU, VGA, Mainboard, RAM, SSD/NVMe trên nhóm Facebook, chống spam bài lặp, lọc giá ảo và săn kèo thơm.",
+  "permissions": [
+    "storage",
+    "tabs",
+    "alarms",
+    "unlimitedStorage",
+    "notifications"
+  ],
+  "host_permissions": [
+    "https://www.facebook.com/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_title": "Mở bảng giá CPU Facebook"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://www.facebook.com/notifications*"
+      ],
+      "js": [
+        "content-notifications.js"
+      ],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": [
+        "https://www.facebook.com/groups/*"
+      ],
+      "js": [
+        "content-visible.js"
+      ],
+      "run_at": "document_start",
+      "world": "MAIN"
+    },
+    {
+      "matches": [
+        "https://www.facebook.com/groups/*"
+      ],
+      "js": [
+        "content-post.js"
+      ],
+      "run_at": "document_idle"
+    }
+  ]
+}

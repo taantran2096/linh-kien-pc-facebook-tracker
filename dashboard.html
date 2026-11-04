@@ -1,0 +1,241 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Linh Kiện PC Facebook Tracker - Bảng điều khiển giá</title>
+<link rel="stylesheet" href="dashboard.css">
+</head>
+<body>
+<header class="top">
+  <div>
+    <h1>Giá Linh Kiện PC trên các nhóm Facebook</h1>
+    <p class="sub" id="status-line">Đang tải…</p>
+  </div>
+  <div class="actions">
+    <button id="btn-watch" title="Mở và ghim tab thông báo Facebook">Mở trang thông báo</button>
+    <button id="btn-toggle"></button>
+    <button id="btn-backup" class="secondary">Sao lưu JSON</button>
+    <button id="btn-csv">Xuất CSV</button>
+    <button id="btn-clear" class="danger">Xoá dữ liệu</button>
+  </div>
+</header>
+
+<!-- Cảnh báo khi tự động tạm dừng do lỗi hoặc checkpoint -->
+<div id="pause-banner" class="alert-banner" hidden style="display:none;">
+  <div class="alert-content">
+    <strong id="pause-title"></strong>
+    <p id="pause-desc" class="alert-desc"></p>
+  </div>
+  <button id="btn-resume-safe" class="primary">Tiếp tục thu thập ngay</button>
+</div>
+
+<div id="warn" class="warn" hidden></div>
+
+<!-- Thanh điều hướng Tab -->
+<nav class="nav-tabs" aria-label="Các mục">
+  <button class="tab-btn active" data-tab="tab-prices">Thống kê giá & Biểu đồ</button>
+  <button class="tab-btn" data-tab="tab-alerts">Theo dõi kèo mong muốn <span id="alert-badge" class="count-badge" hidden>0</span></button>
+  <button class="tab-btn" data-tab="tab-review">Cần kiểm tra & Giá ảo <span id="review-badge" class="count-badge">0</span></button>
+  <button class="tab-btn" data-tab="tab-backup">Sao lưu & Dọn dẹp</button>
+  <button class="tab-btn" data-tab="tab-settings">Cài đặt & Nhật ký</button>
+</nav>
+
+<!-- TAB 1: THỐNG KÊ GIÁ -->
+<div id="tab-prices" class="tab-content active">
+  <section class="filters" aria-label="Bộ lọc">
+    <label>Linh kiện
+      <select id="f-cat">
+        <option value="">Tất cả linh kiện</option>
+        <option value="CPU">CPU (Vi xử lý)</option>
+        <option value="VGA">VGA (Card đồ họa)</option>
+        <option value="Main">Mainboard (Bo mạch)</option>
+        <option value="RAM">RAM (Bộ nhớ trong)</option>
+        <option value="SSD">SSD / NVMe</option>
+      </select>
+    </label>
+    <label>Khoảng thời gian
+      <select id="f-range">
+        <option value="1">24 giờ qua</option>
+        <option value="7" selected>7 ngày qua</option>
+        <option value="14">14 ngày qua</option>
+        <option value="30">30 ngày qua</option>
+        <option value="0">Tất cả</option>
+      </select>
+    </label>
+    <label>Tình trạng
+      <select id="f-cond">
+        <option value="">Tất cả</option>
+        <option value="new-sealed">Mới nguyên seal</option>
+        <option value="new-tray">Mới tray</option>
+        <option value="used">Đã qua sử dụng</option>
+        <option value="unknown">Chưa rõ</option>
+      </select>
+    </label>
+    <label>Trạng thái bán
+      <select id="f-sold">
+        <option value="active" selected>Chỉ bài đang rao bán</option>
+        <option value="sold">Chỉ bài đã bán (Giá chốt)</option>
+        <option value="all">Tất cả (gồm đã bán)</option>
+      </select>
+    </label>
+    <label>Tìm linh kiện
+      <input id="f-q" type="search" placeholder="vd: 12400, 3060, B760, 980 Pro, RAM 32G...">
+    </label>
+    <div class="filter-toggles">
+      <label class="chk" title="Gộp bài cùng người đăng, cùng mẫu và giá trong 48h">
+        <input type="checkbox" id="f-dedup" checked> Loại bài đăng lặp (48h)
+      </label>
+      <label class="chk" title="Tự động loại bỏ các bài người bán đăng chéo cùng nội dung vào nhiều nhóm khác nhau">
+        <input type="checkbox" id="f-crosspost" checked> Lọc Cross-post
+      </label>
+      <label class="chk" title="Tự loại bỏ bài gõ nhầm giá như 22tr thay vì 2tr2">
+        <input type="checkbox" id="f-outlier" checked> Lọc giá bất thường
+      </label>
+    </div>
+  </section>
+
+  <main class="grid">
+    <section class="panel">
+      <h2>Giá theo mẫu linh kiện</h2>
+      <p class="hint">Tính từ bài bán thực tế. Cột "Xu hướng" so sánh trung vị hiện tại với tuần trước đó.</p>
+      <div class="table-wrap">
+        <table id="tbl">
+          <thead><tr>
+            <th>Mẫu linh kiện</th>
+            <th class="n">Số bài</th>
+            <th class="n">Xu hướng tuần</th>
+            <th class="n">Thấp nhất</th>
+            <th class="n">Trung vị</th>
+            <th class="n">Trung bình</th>
+            <th class="n">Hay gặp</th>
+            <th class="n">Mới nhất</th>
+          </tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+      <p id="empty" class="empty" hidden></p>
+    </section>
+
+    <section class="panel" id="detail">
+      <h2 id="detail-title">Chọn một mẫu linh kiện</h2>
+      <div id="chart"></div>
+      <ul id="detail-list" class="posts"></ul>
+    </section>
+  </main>
+</div>
+
+<!-- TAB 2: THEO DÕI KÈO MONG MUỐN (WISHLIST / ALERTS) -->
+<div id="tab-alerts" class="tab-content">
+  <div class="alert-page-grid">
+    <section class="panel">
+      <h2>+ Thêm mục theo dõi kèo mới</h2>
+      <p class="hint">Đặt mẫu linh kiện (CPU, VGA, Main, RAM, SSD) và giá trần mong muốn. Khi có bài mới bằng hoặc rẻ hơn, Chrome sẽ hiện thông báo kèm link bài ngay lập tức.</p>
+      <form id="form-alert" class="alert-form">
+        <label>Danh mục
+          <select id="al-cat">
+            <option value="CPU">CPU (Vi xử lý)</option>
+            <option value="VGA">VGA (Card đồ họa)</option>
+            <option value="Main">Mainboard (Bo mạch)</option>
+            <option value="RAM">RAM (Bộ nhớ trong)</option>
+            <option value="SSD">SSD / NVMe</option>
+          </select>
+        </label>
+        <label>Tên linh kiện cần mua
+          <input type="text" id="al-model" placeholder="vd: RTX 3060, B760M, 7500F, 980 Pro 1TB, RAM 32GB" required>
+        </label>
+        <label>Mức giá muốn mua tối đa
+          <input type="text" id="al-price" placeholder="vd: 4tr5 hoặc 4500000" required>
+        </label>
+        <label>Tình trạng ưu tiên
+          <select id="al-cond">
+            <option value="">Bất kỳ</option>
+            <option value="new-sealed">Mới seal</option>
+            <option value="new-tray">Mới tray</option>
+            <option value="used">Đã dùng</option>
+          </select>
+        </label>
+        <label>Ghi chú (tuỳ chọn)
+          <input type="text" id="al-note" placeholder="vd: Mua lắp máy chơi game">
+        </label>
+        <button type="submit" class="primary">Lưu mục theo dõi</button>
+      </form>
+    </section>
+
+    <section class="panel">
+      <h2>Danh sách đang theo dõi</h2>
+      <ul id="alert-list" class="alert-items"></ul>
+    </section>
+
+    <section class="panel wide">
+      <h2>Lịch sử báo kèo gần đây</h2>
+      <p class="hint">Các bài đăng khớp giá mong muốn mà extension đã phát hiện.</p>
+      <ul id="alert-history" class="alert-history-list"></ul>
+    </section>
+  </div>
+</div>
+
+<!-- TAB 3: CẦN DUYỆT & GIÁ BẤT THƯỜNG -->
+<div id="tab-review" class="tab-content">
+  <section class="panel wide">
+    <h2>Bài cần kiểm tra & Giá nghi vấn gõ nhầm <span id="review-count" class="count"></span></h2>
+    <p class="hint">Bao gồm bài có giá lệch xa trung vị (như 22tr), bài không ghi rõ giá hoặc nhiều mức giá cạnh nhau. Điền giá chuẩn rồi bấm Duyệt.</p>
+    <ul id="review" class="review"></ul>
+  </section>
+</div>
+
+<!-- TAB 4: SAO LƯU & DỌN DẸP DỮ LIỆU -->
+<div id="tab-backup" class="tab-content">
+  <div class="grid">
+    <section class="panel">
+      <h2>Xuất & Nhập dữ liệu (JSON)</h2>
+      <p class="hint">Tránh mất lịch sử thu thập khi cài lại extension hoặc chuyển sang máy tính khác.</p>
+      <div class="backup-actions">
+        <button id="btn-export-json" class="primary">Tải file sao lưu (JSON)</button>
+        <hr class="divider">
+        <label class="file-upload">
+          <span>Chọn file JSON để khôi phục:</span>
+          <input type="file" id="file-import-json" accept=".json">
+        </label>
+      </div>
+      <p id="import-status" class="sub" style="margin-top:10px;"></p>
+    </section>
+
+    <section class="panel">
+      <h2>Dọn dẹp bộ nhớ</h2>
+      <p class="hint">Tự động xoá nội dung văn bản gốc của các bài cũ hơn 90 ngày nhưng vẫn giữ nguyên ngày tháng, mẫu linh kiện và mức giá để biểu đồ và thống kê không bị mất.</p>
+      <div class="prune-box">
+        <p id="storage-summary">Đang tính toán dung lượng…</p>
+        <button id="btn-prune-90" class="secondary">Dọn dẹp bài cũ > 90 ngày ngay</button>
+      </div>
+    </section>
+  </div>
+</div>
+
+<!-- TAB 5: CÀI ĐẶT & NHẬT KÝ -->
+<div id="tab-settings" class="tab-content">
+  <details class="panel wide settings" open>
+    <summary>Cài đặt cơ chế an toàn & Giãn cách</summary>
+    <div class="settings-grid">
+      <label class="chk"><input type="checkbox" id="s-auto"> Tự mở và ghim tab thông báo Facebook</label>
+      <label class="chk"><input type="checkbox" id="s-kw"> Chỉ mở bài khi đoạn trích thông báo có từ khoá linh kiện (CPU, VGA, Main, RAM, SSD)</label>
+      <label class="chk"><input type="checkbox" id="s-crosspost" checked> Tự động phát hiện và chặn mở bài đăng chéo nhiều nhóm (Cross-post)</label>
+      <label>Tự dừng khi gặp lỗi liên tiếp<input type="number" id="s-max-err" min="2" max="15"></label>
+      <label>Tải lại tab thông báo mỗi (phút)<input type="number" id="s-reload" min="1" max="30"></label>
+      <label>Giãn cách giữa 2 bài (giây)<input type="number" id="s-gap" min="4" max="120"></label>
+      <label>Tối đa bài mỗi giờ<input type="number" id="s-max" min="5" max="300"></label>
+      <label>Thời gian gộp bài lặp (giờ)<input type="number" id="s-dedup-hours" min="12" max="168"></label>
+    </div>
+  </details>
+
+  <details class="panel wide logbox" open style="margin-top:16px;">
+    <summary>Nhật ký thu thập gần đây</summary>
+    <p class="hint">Xem chi tiết trạng thái từng bài: đã lưu, đã bán, bị loại do trùng lặp, không có linh kiện, hoặc lỗi.</p>
+    <ul id="log" class="loglist"></ul>
+  </details>
+</div>
+
+<script src="analyzer.js"></script>
+<script src="dashboard.js"></script>
+</body>
+</html>
