@@ -24,11 +24,17 @@
 
   const expectedKey = info.key || '';
   const expectedId = (expectedKey.split('_').pop() || '').replace(/\D/g, '');
+  const nodeText = (node) => {
+    if (!node) return '';
+    const visible = (node.innerText || '').trim();
+    if (visible) return visible;
+    return (node.textContent || '').replace(/\u00a0/g, ' ').trim();
+  };
 
   // 2. Kiểm tra an toàn: đăng nhập / checkpoint
   const curUrl = location.href.toLowerCase();
   const pageTitle = (document.title || '').toLowerCase();
-  const hasArticle = () => !!document.querySelector('[role="article"]');
+  const hasArticle = () => !!document.querySelector('[role="article"], [data-pagelet^="FeedUnit_"]');
   const hasLoginForm = !!document.querySelector('form[action*="login"], input[type="password"], #loginform');
   const hasCheckpointForm = !!document.querySelector('#checkpointSubmitButton, [name="checkpoint_data"], [action*="checkpoint"]');
   const isSecurityPath = curUrl.includes('/checkpoint') || curUrl.includes('/login') || curUrl.includes('security_check');
@@ -60,9 +66,15 @@
   const idRe = expectedId ? new RegExp(`/(?:posts|permalink)/${expectedId}(?:[/?#]|$)|multi_permalinks=${expectedId}|story_fbid=${expectedId}`) : null;
 
   function pickPostArticle() {
-    const all = [...main.querySelectorAll('[role="article"]')];
+    const articleSelector = main.querySelector('[role="article"]')
+      ? '[role="article"]'
+      : '[data-pagelet^="FeedUnit_"]';
+    const all = [...main.querySelectorAll(articleSelector)];
     // Chỉ lấy khung ngoài cùng (bình luận là article lồng bên trong bài)
-    const top = all.filter(a => !a.parentElement || !a.parentElement.closest('[role="article"]'));
+    const top = all.filter(a => {
+      const parent = a.parentElement;
+      return !parent || !parent.closest(articleSelector);
+    });
     if (idRe) {
       const byLink = top.find(a => [...a.querySelectorAll('a[href]')].some(l => idRe.test(hrefOf(l))));
       if (byLink) return byLink;
@@ -73,7 +85,7 @@
   }
 
   let art = pickPostArticle();
-  if (!art && !main.querySelector('[role="article"]')) {
+  if (!art && !main.querySelector('[role="article"], [data-pagelet^="FeedUnit_"]')) {
     // Không có article (cấu trúc lạ): dùng cả vùng main
     art = main;
   }
@@ -84,7 +96,7 @@
 
   // Phần tử thuộc riêng khung bài này (không nằm trong bình luận lồng bên trong)
   const own = (sel) => [...art.querySelectorAll(sel)].filter(el => {
-    const a = el.closest('[role="article"]');
+    const a = el.closest('[role="article"], [data-pagelet^="FeedUnit_"]');
     return art === main ? !a : a === art;
   });
 
@@ -107,7 +119,7 @@
     let n = 0;
     for (const el of own('[role="button"], span, div')) {
       if (el.children.length > 2 || clicked.has(el)) continue;
-      const txt = (el.textContent || '').trim();
+      const txt = nodeText(el);
       if (txt.length > 20 || !SEE_MORE.test(txt)) continue;
       const btn = el.closest('[role="button"], [tabindex="0"]') || el;
       if (clicked.has(btn)) continue;
@@ -121,7 +133,7 @@
   // 7. Tìm thanh tương tác (Thích / Bình luận / Chia sẻ) của chính bài này
   const actionRe = /^(thích|like|bình luận|comment|chia sẻ|share)$/i;
   const findBar = () => own('[role="button"], button').find(b => {
-    const t = (b.textContent || '').trim();
+    const t = nodeText(b);
     const aria = (b.getAttribute('aria-label') || '').trim();
     return actionRe.test(t) || actionRe.test(aria);
   }) || null;
@@ -140,10 +152,10 @@
     };
 
     // Ưu tiên: khối nội dung chuẩn của Facebook
-    const msgSel = '[data-ad-rendering-role="story_message"], [data-ad-comet-preview="message"], [data-ad-preview="message"]';
+    const msgSel = '[data-ad-rendering-role="story_message"], [data-ad-comet-preview="message"], [data-ad-preview="message"], [data-testid="post_message"]';
     let msgNodes = own(msgSel).filter(n => beforeBar(n));
     msgNodes = msgNodes.filter(n => !msgNodes.some(o => o !== n && o.contains(n)));
-    let text = msgNodes.map(n => (n.innerText || '').trim()).filter(Boolean).join('\n\n').trim();
+    let text = msgNodes.map(nodeText).filter(Boolean).join('\n\n').trim();
 
     // Dự phòng 1: các khối dir="auto" ngoài cùng trước thanh tương tác
     if (text.length < 5) {
@@ -153,7 +165,7 @@
         if (b.closest('h1, h2, h3, h4, [role="button"], a[role="link"]')) continue;
         const outer = b.parentElement && b.parentElement.closest('[dir="auto"]');
         if (outer && art.contains(outer)) continue;
-        const t = (b.innerText || '').trim();
+        const t = nodeText(b);
         if (!t || NOISE.test(t) || COUNTER.test(t)) continue;
         if (!paras.includes(t)) paras.push(t);
       }
@@ -162,7 +174,7 @@
 
     // Dự phòng 2: lấy chữ của cả khung bài, cắt tại thanh tương tác
     if (text.length < 5 && art !== main) {
-      const lines = (art.innerText || '').split('\n').map(s => s.trim()).filter(Boolean);
+      const lines = nodeText(art).split('\n').map(s => s.trim()).filter(Boolean);
       const cut = lines.findIndex(l => /^(thích|like)$/i.test(l));
       text = (cut > 0 ? lines.slice(0, cut) : lines).join('\n');
     }
@@ -197,11 +209,11 @@
   const hdr = own('h2, h3, h4')[0];
   if (hdr) {
     const aTag = hdr.querySelector('a');
-    author = ((aTag || hdr).innerText || '').trim();
+    author = nodeText(aTag || hdr);
   }
   if (!author) {
-    const u = own('a[href*="/user/"], a[href*="profile.php"]').find(a => (a.innerText || '').trim());
-    if (u) author = u.innerText.trim();
+    const u = own('a[href*="/user/"], a[href*="profile.php"]').find(a => nodeText(a));
+    if (u) author = nodeText(u);
   }
   author = author.split('\n')[0].trim();
 
@@ -210,7 +222,7 @@
   if (author && art !== main) {
     const nested = [...art.querySelectorAll('[role="article"]')].filter(c => c !== art);
     commentsText = nested
-      .map(c => (c.innerText || '').trim())
+      .map(nodeText)
       .filter(t => t && t.split('\n')[0].trim() === author)
       .slice(0, 10)
       .map(t => t.split('\n').slice(1).join(' ').trim())
