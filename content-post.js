@@ -64,20 +64,28 @@
   // 5. Chọn ĐÚNG khung bài viết
   const hrefOf = (a) => { let h = a.getAttribute('href') || ''; try { h = decodeURIComponent(h); } catch (e) {} return h; };
   const idRe = expectedId ? new RegExp(`/(?:posts|permalink)/${expectedId}(?:[/?#]|$)|multi_permalinks=${expectedId}|story_fbid=${expectedId}`) : null;
+  const ARTICLE_SELECTOR = '[role="article"], [data-pagelet^="FeedUnit_"]';
 
   function pickPostArticle() {
-    const articleSelector = main.querySelector('[role="article"]')
-      ? '[role="article"]'
-      : '[data-pagelet^="FeedUnit_"]';
-    const all = [...main.querySelectorAll(articleSelector)];
+    const all = [...main.querySelectorAll(ARTICLE_SELECTOR)];
     // Chỉ lấy khung ngoài cùng (bình luận là article lồng bên trong bài)
     const top = all.filter(a => {
       const parent = a.parentElement;
-      return !parent || !parent.closest(articleSelector);
+      return !parent || !parent.closest(ARTICLE_SELECTOR);
     });
     if (idRe) {
       const byLink = top.find(a => [...a.querySelectorAll('a[href]')].some(l => idRe.test(hrefOf(l))));
       if (byLink) return byLink;
+    }
+    // Một số layout mới đặt link bài trong article lồng, không phải container ngoài cùng.
+    if (idRe) {
+      const link = [...main.querySelectorAll('a[href]')].find(a => idRe.test(hrefOf(a)));
+      if (link) {
+        let p = link.parentElement;
+        for (let i = 0; p && p !== main && i < 12; i++, p = p.parentElement) {
+          if (p.matches(ARTICLE_SELECTOR)) return p;
+        }
+      }
     }
     if (top.length === 1) return top[0];
     if (top.length > 1 && expectedId && location.pathname.includes(expectedId)) return top[0];
@@ -96,7 +104,7 @@
 
   // Phần tử thuộc riêng khung bài này (không nằm trong bình luận lồng bên trong)
   const own = (sel) => [...art.querySelectorAll(sel)].filter(el => {
-    const a = el.closest('[role="article"], [data-pagelet^="FeedUnit_"]');
+    const a = el.closest(ARTICLE_SELECTOR);
     return art === main ? !a : a === art;
   });
 
@@ -152,7 +160,7 @@
     };
 
     // Ưu tiên: khối nội dung chuẩn của Facebook
-    const msgSel = '[data-ad-rendering-role="story_message"], [data-ad-comet-preview="message"], [data-ad-preview="message"], [data-testid="post_message"]';
+    const msgSel = '[data-ad-rendering-role="story_message"], [data-ad-comet-preview="message"], [data-ad-preview="message"], [data-testid="post_message"], [data-testid="post_message_wrapper"]';
     let msgNodes = own(msgSel).filter(n => beforeBar(n));
     msgNodes = msgNodes.filter(n => !msgNodes.some(o => o !== n && o.contains(n)));
     let text = msgNodes.map(nodeText).filter(Boolean).join('\n\n').trim();
@@ -173,7 +181,7 @@
     }
 
     // Dự phòng 2: lấy chữ của cả khung bài, cắt tại thanh tương tác
-    if (text.length < 5 && art !== main) {
+    if (text.length < 5) {
       const lines = nodeText(art).split('\n').map(s => s.trim()).filter(Boolean);
       const cut = lines.findIndex(l => /^(thích|like)$/i.test(l));
       text = (cut > 0 ? lines.slice(0, cut) : lines).join('\n');
