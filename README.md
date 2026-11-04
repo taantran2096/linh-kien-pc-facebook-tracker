@@ -79,7 +79,7 @@ Extension Chrome tự động theo dõi giá **CPU, VGA (Cạc đồ hoạ), Mai
 ## 📁 Danh sách tệp trong Extension
 - `manifest.json`: Cấu hình quyền `storage`, `tabs`, `alarms`, `notifications`.
 - `analyzer.js`: Lõi phân tích văn bản, nhận diện CPU, tách giá, kiểm tra "đã bán", lọc giá ảo và tính xu hướng.
-- `background.js`: Hàng đợi tab nền, cơ chế tự dừng khi gặp 5 lỗi hoặc checkpoint, deduplication 48h, cảnh báo kèo thơm.
+- `background.js`: Hàng đợi đọc bài bằng tab Facebook ghim, tự quay lại thông báo sau mỗi bài, cơ chế tự dừng khi gặp 5 lỗi hoặc checkpoint, deduplication 48h, cảnh báo kèo thơm.
 - `content-notifications.js`: Quét thông báo chưa đọc từ Facebook.
 - `content-post.js`: Tự động bấm "Xem thêm", đọc nội dung và phát hiện checkpoint bảo mật.
 - `content-visible.js`: Giả lập hiển thị để Facebook tải đầy đủ bài viết ở tab nền.

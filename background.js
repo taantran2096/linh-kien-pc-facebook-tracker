@@ -57,6 +57,22 @@ function parsePost(rawUrl) {
   return { key: `${m[1]}_${m[2]}`, url: `https://www.facebook.com/groups/${m[1]}/posts/${m[2]}/` };
 }
 
+function withControllerFlag(url) {
+  return `${url}${url.includes('?') ? '&' : '?'}cpt=1`;
+}
+
+async function findWatcherTab() {
+  const tabs = await chrome.tabs.query({ url: 'https://www.facebook.com/notifications*' });
+  return tabs.find(t => t.pinned) || tabs[0] || null;
+}
+
+async function returnToWatcher(tabId) {
+  if (tabId == null) return;
+  try {
+    await chrome.tabs.update(tabId, { url: WATCH_URL, pinned: true, active: false });
+  } catch (e) {}
+}
+
 /* ---------- Tính bảng trung vị tham chiếu để phát hiện outlier ---------- */
 function buildMedianMap(posts) {
   const map = new Map();
@@ -90,7 +106,7 @@ async function triggerAutoPause(reason) {
       const tid = st.active.tabId;
       st.active = null;
       await save({ active: null });
-      chrome.tabs.remove(tid).catch(() => {});
+      await returnToWatcher(tid);
     }
   });
   updateBadge();
@@ -383,7 +399,7 @@ async function finishActive(tabId, msg) {
       snippet: cleanPostText.replace(/\s+/g, ' ').slice(0, 160)
     });
 
-    chrome.tabs.remove(tabId).catch(() => {});
+    await returnToWatcher(tabId);
   });
 
   if (keyMismatch) {
@@ -454,7 +470,7 @@ async function failActive(tabId, reason) {
       consecutiveErrors: st.consecutiveErrors
     });
 
-    chrome.tabs.remove(a.tabId).catch(() => {});
+    await returnToWatcher(a.tabId);
   });
 
   if (shouldPause) {
@@ -471,7 +487,7 @@ chrome.tabs.onRemoved.addListener(async (tabId) => {
   }
 });
 
-/* ---------- Bơm hàng đợi ---------- */
+/* ---------- Bơm hàng đợi: tái sử dụng tab Facebook ghim ---------- */
 async function pumpInner() {
   const st = await getState();
   const S = st.settings;
@@ -487,7 +503,7 @@ async function pumpInner() {
         st.stats.failed++;
         st.consecutiveErrors = (st.consecutiveErrors || 0) + 1;
       }
-      chrome.tabs.remove(a.tabId).catch(() => {});
+      await returnToWatcher(a.tabId);
       st.active = null;
       await save({ queue: st.queue, stats: st.stats, active: null, consecutiveErrors: st.consecutiveErrors });
       await addLog({
@@ -519,7 +535,20 @@ async function pumpInner() {
   const item = st.queue.shift();
   let tab;
   try {
-    tab = await chrome.tabs.create({ url: item.url + '?cpt=1', active: false });
+    tab = await findWatcherTab();
+    if (tab) {
+      tab = await chrome.tabs.update(tab.id, {
+        url: withControllerFlag(item.url),
+        active: false,
+        pinned: true
+      });
+    } else {
+      tab = await chrome.tabs.create({
+        url: withControllerFlag(item.url),
+        active: false,
+        pinned: true
+      });
+    }
   } catch (e) {
     st.queue.push(item);
     await save({ queue: st.queue });

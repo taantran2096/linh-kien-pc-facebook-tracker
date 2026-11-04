@@ -104,8 +104,9 @@
 
   // Phần tử thuộc riêng khung bài này (không nằm trong bình luận lồng bên trong)
   const own = (sel) => [...art.querySelectorAll(sel)].filter(el => {
+    if (art === main) return true;
     const a = el.closest(ARTICLE_SELECTOR);
-    return art === main ? !a : a === art;
+    return a === art;
   });
 
   // 6. Giả lập click chuẩn React
